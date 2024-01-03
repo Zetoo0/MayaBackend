@@ -14,7 +14,7 @@ use serde_json::json;
 
 
 //---------------------------------------------COURSE RELATED-------------------------------------------------
-
+//get request to gett all courses
 #[get("/courses")]
 pub async fn getCourses(data : web::Data<AppState>)->impl Responder{
    // let course_id = path.into_inner();
@@ -36,6 +36,10 @@ pub async fn getCourses(data : web::Data<AppState>)->impl Responder{
     HttpResponse::Ok().json(json_response)
 }
 
+///get request to fetch 1 course with a unique id
+///return the course with a 200 resppcode
+/// errors: sqlx row not found and basic not found err
+/// resp with code 404
 #[get("/courses/{id}")]
 async fn get_course_by_id(data : web::Data<AppState>, path : web::Path<i32>) -> impl Responder{
 
@@ -50,7 +54,7 @@ async fn get_course_by_id(data : web::Data<AppState>, path : web::Path<i32>) -> 
     });
     return HttpResponse::Ok().json(course_resp);
 
-    /*  match query_res{
+      /*match query_res{
         Ok(course) => {
             let course_resp = serde_json::json!({
                 "status" : "success",
@@ -82,6 +86,23 @@ async fn get_course_by_id(data : web::Data<AppState>, path : web::Path<i32>) -> 
 
 //---------------------------------------------USER RELATED-------------------------------------------------
 
+#[get("/user/{id}")]
+async fn get_user_by_id(data : web::Data<AppState>, path : web::Path<i32>)->impl Responder{
+    let u_id = path.into_inner();
+    let query_result = service::service::get_user_by_maya_id(data, u_id).await;
+
+    let query_resp = serde_json::json!({
+        "status" : "success",
+        "data"   : serde_json::json!({
+        "user"   : &query_result
+        }),
+    });
+
+    return HttpResponse::Ok().json(query_resp);
+}
+
+
+///post request for creating user
 #[post("/user/")]
 async fn create_user(body: web::Json<UserModel>, data : web::Data<AppState>)->impl Responder{
     //let u_id:i32 = 0;
@@ -124,7 +145,7 @@ async fn create_user(body: web::Json<UserModel>, data : web::Data<AppState>)->im
 async fn index() -> HttpResponse {
     HttpResponse::Ok().body("heyho")
 }
-
+//service configurations, add routes and scope
 pub fn config(conf: &mut web::ServiceConfig){
     let scope = web::scope("/api")
     .service(getCourses)

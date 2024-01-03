@@ -17,3 +17,4 @@ pub struct UpdateCourseSchema{
     pub recommended_semester : Option<u8>,
     pub credit : Option<u8>
 }
+
