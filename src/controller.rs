@@ -17,15 +17,9 @@ use serde_json::json;
 //get request to gett all courses
 #[get("/courses")]
 pub async fn getCourses(data : web::Data<AppState>)->impl Responder{
-   // let course_id = path.into_inner();
 
-  /* match sqlx::query_as::<_,CourseModel>("SELECT course_id, namae FROM course").fetch_all(&data.db).await{
-        Ok(courses) => HttpResponse::Ok().json(courses),
-        Err(_) => HttpResponse::NotFound().json("Cannot find any course"),
-   }*/
 
- //   let a: Vec<CourseModel> = sqlx::query_as!(CourseModel, "r# SELECT * FROM course").fetch_all(&data.db).await.unwrap();
-    let courses: Vec<Course> = service::service::get_all_course(data).await;  //sqlx::query_as!(CourseModel, r#"SELECT * FROM course"#).fetch_all(&data.db).await.unwrap();
+    let courses: Vec<Course> = service::service::get_all_course(data).await;  
     let course_responses: Vec<Course> = courses.into_iter().collect::<Vec<Course>>();
 
     let json_response = serde_json::json!({
@@ -44,17 +38,9 @@ pub async fn getCourses(data : web::Data<AppState>)->impl Responder{
 async fn get_course_by_id(data : web::Data<AppState>, path : web::Path<i32>) -> impl Responder{
 
     let course_id = path.into_inner();
-    let query_res: Course = service::service::get_course_by_id(data, course_id).await;
+    let query_res = service::service::get_course_by_id(data, course_id).await;
 
-     let course_resp = serde_json::json!({
-        "status" : "success",
-        "data" : serde_json::json!({
-            "course" : &query_res
-        }),
-    });
-    return HttpResponse::Ok().json(course_resp);
-
-      /*match query_res{
+      match query_res{
         Ok(course) => {
             let course_resp = serde_json::json!({
                 "status" : "success",
@@ -65,6 +51,12 @@ async fn get_course_by_id(data : web::Data<AppState>, path : web::Path<i32>) -> 
             return HttpResponse::Ok().json(course_resp);
 
         },
+        Err(sqlx::Error::RowNotFound) => {
+            return HttpResponse::NotFound().json(serde_json::json!({
+                "status" : "fail",
+                "message" : format!("Cannot find the course with id: {}", course_id)
+            }));
+        },
         Err(err) => {
             return HttpResponse::NotFound().json(serde_json::json!({
                 "status" : "fail",
@@ -72,13 +64,8 @@ async fn get_course_by_id(data : web::Data<AppState>, path : web::Path<i32>) -> 
             }));
 
         }
-         Err(sqlx::Error::RowNotFound) => {
-            return HttpResponse:NotFound().json(serde_json::json!({
-                "status" : "fail",
-                "message" : format!("Cannot find the course with id: {}", course_id)
-            }));
-        }
-    };*/
+        
+    };
 
 }
 
@@ -86,53 +73,60 @@ async fn get_course_by_id(data : web::Data<AppState>, path : web::Path<i32>) -> 
 
 //---------------------------------------------USER RELATED-------------------------------------------------
 
+///Get a user datas measured by id
 #[get("/user/{id}")]
 async fn get_user_by_id(data : web::Data<AppState>, path : web::Path<i32>)->impl Responder{
     let u_id = path.into_inner();
     let query_result = service::service::get_user_by_maya_id(data, u_id).await;
 
-    let query_resp = serde_json::json!({
-        "status" : "success",
-        "data"   : serde_json::json!({
-        "user"   : &query_result
-        }),
-    });
+    match query_result{
+        Ok(user) => {
+            let query_resp = serde_json::json!({
+                "status" : "success",
+                "data"   : serde_json::json!({
+                "user"   : &user
+                }),
+            });
+            return HttpResponse::Ok().json(query_resp);
+        }
+        Err(err) => {
+            let query_resp = serde_json::json!({
+                "status" : "fail",
+                "message" : format!("There was an error with the request: {:?}", err)
+            });
 
-    return HttpResponse::Ok().json(query_resp);
+            return HttpResponse::BadRequest().json(query_resp);
+        }
+    }
+
+
 }
 
 
 ///post request for creating user
+///requirement: username, password and an email
+/// namae,email,password
+/// if user exists with same datas it returns Duplicate error
 #[post("/user/")]
 async fn create_user(body: web::Json<UserModel>, data : web::Data<AppState>)->impl Responder{
     //let u_id:i32 = 0;
-    let query = sqlx::query(r#"INSERT INTO user (id, neptun_id, maya_id, namae, email, password, user_logname) VALUES(NULL, ?, ?, ?, ?, SHA(?), ?)"#)
-    //.bind(u_id.clone())
-    .bind(body.neptun_id.to_string())
-    .bind(body.maya_id.to_string())
-    .bind(body.namae.to_string())
-    .bind(body.email.to_string())
-    .bind(body.password.to_string())
-    .bind(body.user_logname.to_string())
-    .execute(&data.db)
-    .await
-    .map_err(|err: sqlx::Error| err.to_string());
+    let query = service::service::create_user(body, data).await.map_err(|err: sqlx::Error| err.to_string());
+
 
     if let Err(err) = query{
         if err.contains("Duplicate entry"){
             return HttpResponse::BadRequest().json(serde_json::json!({
                 "status" : "fail",
-                "message" : "duplicate lol"
+                "message" : "Duplicate error!"
             }),
         );
         }
-
         return HttpResponse::InternalServerError().json(serde_json::json!({
             "status" : "fail",
             "message" : format!("{:?}", err)
         }))
     }else{
-        return HttpResponse::Ok().body("anyd");
+        return HttpResponse::Ok().body("Successfully created the user!");
     }
 
    
@@ -147,7 +141,7 @@ async fn index() -> HttpResponse {
 }
 //service configurations, add routes and scope
 pub fn config(conf: &mut web::ServiceConfig){
-    let scope = web::scope("/api")
+    let scope = web::scope("/maya")
     .service(getCourses)
     .service(get_course_by_id)
     .service(create_user)
@@ -156,4 +150,3 @@ pub fn config(conf: &mut web::ServiceConfig){
     conf.service(scope);    
 }
 }
-//#[get(course/id)]
